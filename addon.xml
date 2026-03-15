@@ -376,7 +376,7 @@ v1.0.0 (TaMaBin Pro Fork by d4yronsc)
 - NEW: DeepL Free as default service (500K chars/month free)
 - NEW: Smart post-processing for Spanish: dialogue dashes, opening marks, orthography
 - NEW: Improved subtitle wrapping: upper line shorter, semantic segmentation
-- NEW: HTML tag preservation (<i>, <b>) for off-screen voices and on-screen text
+- NEW: HTML tag preservation (&lt;i&gt;, &lt;b&gt;) for off-screen voices and on-screen text
 - NEW: Professional LLM prompts for OpenAI/Anthropic with genre-aware register
 - NEW: Updated Claude models to latest (Sonnet 4.6, Opus 4.6, Haiku 4.5)
 - NEW: Netflix timing constants (833ms min, 7s max, 17 cps)
