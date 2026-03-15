@@ -289,57 +289,125 @@ class SubtitleParser:
     # Broadcast subtitle standards
     MAX_CHARS_PER_LINE = 42
     MAX_LINES = 2
+    # Netflix timing standards
+    MIN_DURATION_MS = 833      # Minimum subtitle duration
+    MAX_DURATION_MS = 7000     # Maximum subtitle duration
+    MAX_CPS = 17              # Maximum characters per second (reading speed)
 
     @staticmethod
     def _wrap_text(text, max_chars=42, max_lines=2):
-        """Wrap subtitle text to broadcast standards.
+        """Wrap subtitle text to Netflix/TaMaBin broadcast standards.
 
-        - Max *max_chars* characters per line (default 42, Netflix/broadcast).
+        - Max *max_chars* characters per line (default 42, Netflix standard).
         - Max *max_lines* lines per subtitle event (default 2).
-        - Breaks at word boundaries; never mid-word.
-        - Preserves existing newlines if they already comply.
+        - Upper line should be shorter than or equal to lower line.
+        - Preserves dialogue markers ("- ").
+        - Preserves HTML tags (<i>, <b>, etc.) without counting them in length.
+        - Never breaks mid-word.
         """
-        # Flatten to single line first, then re-wrap
-        words = text.replace('\n', ' ').split()
-        if not words:
+        import re as _re
+
+        def _visible_len(s):
+            """Length excluding HTML tags."""
+            return len(_re.sub(r'<[^>]+>', '', s))
+
+        # Check if it's a dialogue (two speakers)
+        lines = text.split('\n')
+        if len(lines) == 2 and lines[0].strip().startswith('- ') and lines[1].strip().startswith('- '):
+            # Dialogue: wrap each line independently, respecting max_chars
+            result = []
+            for line in lines:
+                if _visible_len(line) <= max_chars:
+                    result.append(line)
+                else:
+                    # Truncate with ellipsis
+                    words = line.split()
+                    current = words[0]
+                    for word in words[1:]:
+                        if _visible_len(current + ' ' + word) <= max_chars:
+                            current += ' ' + word
+                        else:
+                            break
+                    result.append(current)
+            return '\n'.join(result[:max_lines])
+
+        # Single speaker: flatten and re-wrap
+        flat = text.replace('\n', ' ')
+        flat = ' '.join(flat.split())  # normalize spaces
+
+        if not flat:
             return text
 
-        lines = []
-        current = words[0]
-        for word in words[1:]:
-            if len(current) + 1 + len(word) <= max_chars:
-                current += ' ' + word
-            else:
-                lines.append(current)
-                current = word
-        lines.append(current)
+        # If it fits in one line, use one line
+        if _visible_len(flat) <= max_chars:
+            return flat
 
-        # Truncate to max_lines; if text is longer, keep first max_lines
-        if len(lines) > max_lines:
-            # Try to rebalance into max_lines by being more aggressive
-            lines = lines[:max_lines]
-            # Truncate last line with ellipsis if needed
-            if len(lines[-1]) > max_chars:
-                lines[-1] = lines[-1][:max_chars - 1] + '…'
+        # Need to split into 2 lines
+        # Strategy: find the best split point where upper line <= lower line
+        words = flat.split()
+        if len(words) <= 1:
+            if _visible_len(flat) > max_chars:
+                return flat[:max_chars - 1] + '…'
+            return flat
 
-        # Ensure each line is within limit (handles single very long words)
-        for i, line in enumerate(lines):
-            if len(line) > max_chars:
-                lines[i] = line[:max_chars - 1] + '…'
+        best_split = len(words) // 2  # default: middle
+        best_diff = float('inf')
 
-        return '\n'.join(lines)
+        for split_at in range(1, len(words)):
+            upper = ' '.join(words[:split_at])
+            lower = ' '.join(words[split_at:])
+            upper_len = _visible_len(upper)
+            lower_len = _visible_len(lower)
+
+            if upper_len > max_chars or lower_len > max_chars:
+                continue
+
+            # Prefer upper line shorter than or equal to lower
+            if upper_len <= lower_len:
+                diff = lower_len - upper_len
+                if diff < best_diff:
+                    best_diff = diff
+                    best_split = split_at
+
+        upper = ' '.join(words[:best_split])
+        lower = ' '.join(words[best_split:])
+
+        # Ensure each line is within limit
+        if _visible_len(upper) > max_chars:
+            upper = upper[:max_chars - 1] + '…'
+        if _visible_len(lower) > max_chars:
+            lower = lower[:max_chars - 1] + '…'
+
+        return f'{upper}\n{lower}'
 
     def _clean_text(self, text):
-        """Clean and normalize subtitle text."""
+        """Clean and normalize subtitle text, preserving meaningful HTML tags."""
         # Decode HTML entities
         text = unescape(text)
-        
-        # Remove HTML tags but keep their content
+
+        # Preserve <i>, </i>, <b>, </b>, <u>, </u> tags but remove all others
+        # First, temporarily protect allowed tags
+        protected = {}
+        import uuid
+        for tag in ['<i>', '</i>', '<b>', '</b>', '<u>', '</u>']:
+            placeholder = f'__TAG_{uuid.uuid4().hex[:8]}__'
+            protected[placeholder] = tag
+            text = text.replace(tag, placeholder)
+            # Also handle uppercase versions
+            text = text.replace(tag.upper(), placeholder)
+
+        # Remove remaining HTML tags
         text = re.sub(r'<[^>]+>', '', text)
-        
-        # Normalize whitespace
-        text = ' '.join(text.split())
-        
+
+        # Restore protected tags
+        for placeholder, tag in protected.items():
+            text = text.replace(placeholder, tag)
+
+        # Normalize whitespace (but preserve newlines)
+        lines = text.split('\n')
+        lines = [' '.join(line.split()) for line in lines]
+        text = '\n'.join(lines)
+
         return text.strip()
     
     def _generate_srt(self, entries):

@@ -143,9 +143,14 @@ class DeepLTranslator(BaseTranslator):
         
         if source:
             data['source_lang'] = source
-        
-        if self.formality != 'default' and target in ['DE', 'FR', 'IT', 'ES', 'NL', 'PL', 'PT-PT', 'PT-BR', 'RU']:
-            data['formality'] = self.formality
+
+        # Default to informal for Spanish (TaMaBin style uses "tú")
+        formality = self.formality
+        if formality == 'default' and target.upper().startswith('ES'):
+            formality = 'less'
+
+        if formality != 'default' and target in ['DE', 'FR', 'IT', 'ES', 'NL', 'PL', 'PT-PT', 'PT-BR', 'RU']:
+            data['formality'] = formality
         
         headers = {
             'Authorization': f'DeepL-Auth-Key {self.api_key}'
@@ -153,11 +158,58 @@ class DeepLTranslator(BaseTranslator):
         
         try:
             response = self._request(f'{self.base_url}/translate', data, headers)
-            return [t['text'] for t in response.get('translations', [])]
+            results = [t['text'] for t in response.get('translations', [])]
+            return self._post_process_spanish(results, target)
         except Exception as e:
             self._log(f"DeepL error: {e}", xbmc.LOGERROR)
             return texts
     
+    def _post_process_spanish(self, texts, target_lang):
+        """Apply TaMaBin-style post-processing for Spanish translations."""
+        if not target_lang.upper().startswith('ES'):
+            return texts
+
+        import re
+
+        processed = []
+        for text in texts:
+            # Fix dialogue format: ensure "- " (dash + space) not "—" or "-text"
+            lines = text.split('\n')
+            fixed_lines = []
+            for line in lines:
+                line = line.strip()
+                # Convert em-dash or en-dash to "- "
+                if line.startswith('\u2014') or line.startswith('\u2013'):
+                    line = '- ' + line[1:].lstrip()
+                # Ensure space after leading dash
+                elif line.startswith('-') and len(line) > 1 and line[1] != ' ':
+                    line = '- ' + line[1:]
+                fixed_lines.append(line)
+            text = '\n'.join(fixed_lines)
+
+            # Fix "solo" -> "sólo" (classical orthography)
+            text = re.sub(r'\bsolo\b', 'sólo', text)
+            text = re.sub(r'\bSolo\b', 'Sólo', text)
+
+            # Ensure opening punctuation marks
+            # Add ¿ if line has ? but no ¿
+            for line in text.split('\n'):
+                if '?' in line and '\u00bf' not in line:
+                    # Find the start of the question
+                    q_idx = line.rfind('?')
+                    # Simple heuristic: add ¿ at start of sentence or after last period/comma
+                    start = max(line.rfind('.', 0, q_idx), line.rfind(',', 0, q_idx), line.rfind('!', 0, q_idx)) + 1
+                    if start == 0 and not line.startswith('- '):
+                        text = text.replace(line, '\u00bf' + line.lstrip(), 1)
+                    elif start > 0:
+                        before = line[:start].rstrip() + ' '
+                        after = '\u00bf' + line[start:].lstrip()
+                        text = text.replace(line, before + after, 1)
+
+            processed.append(text)
+
+        return processed
+
     def _map_language(self, lang):
         """Map language code to DeepL format."""
         mapping = {
@@ -433,15 +485,42 @@ class OpenAITranslator(BaseTranslator):
         # Combine texts for efficient translation
         combined = '\n---SUBTITLE_BREAK---\n'.join(texts)
         
-        system_prompt = f"""You are a professional subtitle translator. Translate the following subtitles from {source_name} to {target_name}.
+        system_prompt = f"""You are a professional subtitle translator specializing in high-quality Latin American Spanish (español latino neutro). Translate the following subtitles from {source_name} to {target_name}.
 
-Rules:
-- Preserve the exact number of subtitle entries (separated by ---SUBTITLE_BREAK---)
-- Keep translations natural and colloquial, suitable for subtitles
-- Maintain the same tone and style as the original
-- Keep translations concise (subtitles have limited space)
-- Do not add explanations or notes
-- Only output the translations, nothing else"""
+TRANSLATION STYLE (TaMaBin Professional Standard):
+- Use neutral Latin American Spanish with "tú" form (never "vos" or "vosotros")
+- Natural, fluid translations that read like native speech
+- Calibrate profanity/register to match the source content's genre and tone:
+  * Family/animation: ZERO profanity, clean vocabulary
+  * Drama: moderate ("mierda", "maldición", "demonios")
+  * Horror/thriller: strong when source warrants it ("carajo", "jodido", "cabrón")
+- Preserve cultural terms, proper nouns, brand names without translating
+- Translate idioms to natural Spanish equivalents, not literal translations
+- Use "Sólo" with accent (classical orthography)
+
+SUBTITLE FORMAT RULES (Netflix Standard):
+- Maximum 42 characters per line
+- Maximum 2 lines per subtitle
+- Keep translations concise - subtitles have limited display time
+- Use "- " (dash + space) for dialogue lines, not dash alone
+- Opening punctuation marks always: ¿ ¡
+- Use <i> tags for: off-screen voices, phone calls, TV/radio, thoughts, songs
+- Preserve existing HTML tags (<i>, <b>) from source
+
+DIALOGUE FORMAT:
+- Two speakers in one subtitle: first speaker on line 1, second on line 2, both with "- " prefix
+- Single speaker on 2 lines: NO dash prefix
+
+NUMBERS:
+- 1-10: write in words ("tres", "siete")
+- Above 10: use digits ("30 años", "127.000")
+- Use period as thousands separator (127.000, not 127,000)
+- Percentages in words: "42 por ciento"
+
+CRITICAL RULES:
+- Preserve the EXACT number of subtitle entries (separated by ---SUBTITLE_BREAK---)
+- Do NOT add explanations, notes, or comments
+- Output ONLY the translated text, nothing else"""
         
         data = {
             'model': self.model,
@@ -482,7 +561,7 @@ class AnthropicTranslator(BaseTranslator):
     def __init__(self, config):
         super().__init__(config)
         self.api_key = config.get('api_key', '')
-        self.model = config.get('model', 'claude-3-haiku-20240307')
+        self.model = config.get('model', 'claude-sonnet-4-6')
         self.base_url = 'https://api.anthropic.com/v1'
     
     def translate(self, text, source_lang, target_lang):
@@ -503,18 +582,46 @@ class AnthropicTranslator(BaseTranslator):
         
         combined = '\n---SUBTITLE_BREAK---\n'.join(texts)
         
-        system_prompt = f"""You are a professional subtitle translator. Translate subtitles from {source_name} to {target_name}.
+        system_prompt = f"""You are a professional subtitle translator specializing in high-quality Latin American Spanish (español latino neutro). Translate the following subtitles from {source_name} to {target_name}.
 
-Rules:
-- Preserve the exact number of subtitle entries (separated by ---SUBTITLE_BREAK---)
-- Keep translations natural and colloquial
-- Maintain tone and style
-- Keep translations concise for subtitle format
-- Output only translations, no explanations"""
+TRANSLATION STYLE (TaMaBin Professional Standard):
+- Use neutral Latin American Spanish with "tú" form (never "vos" or "vosotros")
+- Natural, fluid translations that read like native speech
+- Calibrate profanity/register to match the source content's genre and tone:
+  * Family/animation: ZERO profanity, clean vocabulary
+  * Drama: moderate ("mierda", "maldición", "demonios")
+  * Horror/thriller: strong when source warrants it ("carajo", "jodido", "cabrón")
+- Preserve cultural terms, proper nouns, brand names without translating
+- Translate idioms to natural Spanish equivalents, not literal translations
+- Use "Sólo" with accent (classical orthography)
+
+SUBTITLE FORMAT RULES (Netflix Standard):
+- Maximum 42 characters per line
+- Maximum 2 lines per subtitle
+- Keep translations concise - subtitles have limited display time
+- Use "- " (dash + space) for dialogue lines, not dash alone
+- Opening punctuation marks always: ¿ ¡
+- Use <i> tags for: off-screen voices, phone calls, TV/radio, thoughts, songs
+- Preserve existing HTML tags (<i>, <b>) from source
+
+DIALOGUE FORMAT:
+- Two speakers in one subtitle: first speaker on line 1, second on line 2, both with "- " prefix
+- Single speaker on 2 lines: NO dash prefix
+
+NUMBERS:
+- 1-10: write in words ("tres", "siete")
+- Above 10: use digits ("30 años", "127.000")
+- Use period as thousands separator (127.000, not 127,000)
+- Percentages in words: "42 por ciento"
+
+CRITICAL RULES:
+- Preserve the EXACT number of subtitle entries (separated by ---SUBTITLE_BREAK---)
+- Do NOT add explanations, notes, or comments
+- Output ONLY the translated text, nothing else"""
         
         data = {
             'model': self.model,
-            'max_tokens': 4096,
+            'max_tokens': 8192,
             'system': system_prompt,
             'messages': [
                 {'role': 'user', 'content': combined}

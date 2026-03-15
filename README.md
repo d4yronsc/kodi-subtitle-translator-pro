@@ -1,89 +1,85 @@
-# Subtitle Translator for Kodi
+# Subtitle Translator Pro (TaMaBin) for Kodi
 
-[![GitHub Release](https://img.shields.io/github/v/release/yeager/kodi-subtitle-translator?label=version)](https://github.com/yeager/kodi-subtitle-translator/releases)
-[![Transifex](https://img.shields.io/badge/translations-Transifex-blue)](https://app.transifex.com/danielnylander/kodi-subtitle-translator/)
+[![GitHub Release](https://img.shields.io/github/v/release/d4yronsc/kodi-subtitle-translator-pro?label=version)](https://github.com/d4yronsc/kodi-subtitle-translator-pro/releases)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
-Automatically translate embedded and external subtitles in Kodi to your preferred language. Supports 10 translation services with automatic fallback.
+**Professional-quality subtitle translation for Kodi with Netflix broadcast standards.**
 
-## Features
+Fork of [yeager/kodi-subtitle-translator](https://github.com/yeager/kodi-subtitle-translator) by [Daniel Nylander](https://github.com/yeager), with significant quality and workflow improvements.
 
-- **Automatic subtitle translation** — translates subtitles on playback start
-- **Pure Python MKV extractor** — extracts embedded subtitles directly from MKV files without FFmpeg, streaming over SMB/NFS (no temp copy needed)
-- **10 translation services** — Lingva (default, free), DeepL, Google Translate, Microsoft, OpenAI, Anthropic, LibreTranslate, Argos (offline), MyMemory, Yandex
-- **Auto-fallback** — if selected service needs API key that's missing, falls back to Lingva
-- **Embedded & external subtitles** — built-in MKV parser for embedded subs, also handles .srt/.ass/.ssa/.sub/.vtt files
-- **Translation profiles** — Anime, Kids, Documentary, etc.
-- **25 UI languages** — fully translated via Transifex
-- **Translation cache** — avoids re-translating same content
-- **Android/Shield support** — works out of the box, no FFmpeg needed for MKV files
+## What's New in v1.0.0
+
+### 3-Tier Subtitle Priority System
+Instead of translating everything, the addon now follows a smart priority system:
+
+1. **Embedded subtitles** — Uses Spanish (or your target language) subtitles already embedded in the video
+2. **Subtitle search** — Searches via your installed subtitle addons (a4ksubtitles, OpenSubtitles, etc.)
+3. **Translation** — Translates only as a last resort, saving your API credits
+
+### TaMaBin Professional Translation Quality
+- **Netflix subtitle standards**: 42 chars/line max, 2 lines max, 833ms min duration, 7s max duration, 17 CPS reading speed
+- **Balanced line wrapping**: Upper line always shorter than or equal to lower line (broadcast standard)
+- **HTML tag preservation**: Keeps `<i>`, `<b>`, `<u>` formatting through translation pipeline
+- **Spanish latino neutro** post-processing for DeepL: dialogue dashes (—→"- "), opening punctuation (¿¡), classical orthography ("sólo")
+- **Full TaMaBin prompt** for Claude/OpenAI: genre-calibrated register, natural dialogue, proper number formatting
+
+### Default Configuration for Spanish
+- Default target language: **Spanish** (was Swedish)
+- Default translation service: **DeepL Free** (was MyMemory)
+- Informal formality automatically applied for Spanish translations
 
 ## Installation
 
-### From Yeager Repository (recommended — auto-updates)
+1. Download `service.subtitletranslator.tamabin-1.0.0.zip` from [Releases](https://github.com/d4yronsc/kodi-subtitle-translator-pro/releases)
+2. In Kodi: **Settings → Add-ons → Install from zip file**
+3. Select the downloaded ZIP
+4. Configure: **Add-ons → My add-ons → Services → Subtitle Translator Pro → Configure**
 
-1. Download [repository.yeager-1.0.1.zip](https://yeager.github.io/kodi-repo/repository.yeager-1.0.1.zip)
-2. In Kodi: **Add-ons → Install from zip file** → select the downloaded zip
-3. Go to **Add-ons → Install from repository → Yeager Repository → Services**
-4. Install **Subtitle Translator**
+## Configuration
 
-### Manual install
+### Subtitle Priority (new settings)
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Search for subtitles | Enable/disable searching via installed subtitle addons | On |
+| Search wait time | How long to wait for subtitle search results | 15s |
+| Priority mode | Embedded→Search→Translate / Embedded→Translate / Search only | Embedded→Search→Translate |
 
-Download the latest zip from [Releases](https://github.com/yeager/kodi-subtitle-translator/releases) and install from zip in Kodi.
+### Translation Services
 
-## FFmpeg (optional)
-
-**FFmpeg is optional.** The addon has a built-in pure Python MKV subtitle extractor that works without FFmpeg, including over SMB/NFS network paths. This is the primary extraction method on all platforms.
-
-FFmpeg is used as a **fallback** for non-MKV containers (MP4, AVI, etc.) or if the built-in extractor fails. External subtitle files (.srt, etc.) never need FFmpeg.
-
-| Platform | Installation |
-|----------|-------------|
-| **Windows** | Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH |
-| **macOS** | `brew install ffmpeg` |
-| **Linux** | `sudo apt install ffmpeg` or `sudo dnf install ffmpeg` |
-| **Android/Shield** | The addon offers **automatic download** if FFmpeg fallback is needed. One click — no manual steps. |
-
-### Android/Shield notes
-
-The built-in Python extractor is the primary method on Android, avoiding FFmpeg permission issues with Android's scoped storage. FFmpeg auto-download is available as fallback if needed.
-
-## Translation Services
-
-| Service | API Key | Free Tier | Speed |
+| Service | API Key | Free Tier | TaMaBin Quality |
 |---------|:---:|:---:|:---:|
-| **Lingva** (default) | ❌ | ✅ Unlimited | ~50 lines/min |
-| **DeepL** | ✅ | 500k chars/month | ⚡ Fast (batch) |
-| Google Translate | ✅ | Limited | ⚡ Fast |
-| Microsoft Translator | ✅ | 2M chars/month | ⚡ Fast |
-| OpenAI (GPT) | ✅ | Pay-per-use | ⚡ Fast (batch) |
-| Anthropic (Claude) | ✅ | Pay-per-use | ⚡ Fast (batch) |
-| LibreTranslate | ✅ | Self-hosted | Medium |
-| Argos Translate | ❌ | ✅ Offline | Medium |
-| MyMemory | ❌ | 5k chars/day | Medium |
-| Yandex | ✅ | Limited | ⚡ Fast |
+| **DeepL Free** (default) | ✅ | 500k chars/month | ✅ Post-processing |
+| DeepL Pro | ✅ | Unlimited | ✅ Post-processing |
+| **Claude AI** (Anthropic) | ✅ | Pay-per-use | ✅ Full TaMaBin prompt |
+| **OpenAI GPT** | ✅ | Pay-per-use | ✅ Full TaMaBin prompt |
+| Lingva | ❌ | Unlimited | Basic |
+| Google Translate | ✅ | Limited | Basic |
+| Microsoft Translator | ✅ | 2M chars/month | Basic |
+| LibreTranslate | ✅ | Self-hosted | Basic |
+| Argos Translate | ❌ | Offline | Basic |
+| MyMemory | ❌ | 5k chars/day | Basic |
 
-> **Tip:** Lingva is free but rate-limited (~50 requests/min). For faster translations, use DeepL Free (500k chars/month) or set up your own LibreTranslate instance.
+> **Recommended**: DeepL Free gives you 500,000 characters/month for free — more than enough for casual viewing. For best quality, use Claude AI with the full TaMaBin professional prompt.
 
-## Settings
+## Requirements
 
-The addon has four settings levels: Basic, Standard, Advanced, and Expert. Configure via **Add-ons → My add-ons → Services → Subtitle Translator → Configure**.
+- Kodi 19 (Matrix) or later
+- For subtitle search priority: Install a subtitle addon (a4ksubtitles, OpenSubtitles, etc.)
+- For DeepL: Free API key from [deepl.com/pro-api](https://www.deepl.com/pro-api)
+- For Claude/OpenAI: API key from respective provider
 
-## Compatibility
+## Platforms
 
-- **Kodi 19 (Matrix)** and newer (Python 3)
-- **Kodi 20 (Nexus)**, **21 (Omega)**, **22 (Piers)** — tested and working
-- **Platforms**: Windows, macOS, Linux, Android, Android TV (Nvidia Shield)
-- **Network**: SMB, NFS, local files — all supported via built-in MKV parser
+- Windows, macOS, Linux
+- Android TV (Nvidia Shield, Fire TV)
+- Network sources: SMB, NFS, local files
 
-## Translations
+## Credits
 
-UI translations managed via [Transifex](https://app.transifex.com/danielnylander/kodi-subtitle-translator/). Currently available in 25 languages including Swedish, German, French, Spanish, and more.
+- **Original addon**: [yeager/kodi-subtitle-translator](https://github.com/yeager/kodi-subtitle-translator) by [Daniel Nylander](https://danielnylander.se)
+- **TaMaBin Pro improvements**: [d4yronsc](https://github.com/d4yronsc)
+- Translation quality standards based on Netflix Timed Text Style Guide
 
 ## License
 
-GPL-3.0-or-later
-
-## Author
-
-Daniel Nylander — [danielnylander.se](https://danielnylander.se)
+GPL-3.0-or-later (same as original)

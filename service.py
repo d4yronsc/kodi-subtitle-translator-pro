@@ -385,7 +385,21 @@ class SubtitleTranslatorPlayer(xbmc.Player):
                     notify(get_string(30719))  # "Subtitle already available in target language"
                 self.load_subtitle(target_external_path)
                 return
-            
+
+            # Priority 3: Search via installed subtitle addons (a4ksubtitles, opensubtitles, etc.)
+            subtitle_priority = get_setting('subtitle_priority')
+            if subtitle_priority != 'embedded_translate':  # Skip search if user chose embedded_translate
+                if self.search_subtitle_via_addons():
+                    return
+
+                if subtitle_priority == 'search_only':
+                    log("Subtitle priority set to search_only, not translating")
+                    if self.show_notification:
+                        # 30902: "No subtitles found, translation disabled by priority setting"
+                        # (must be added to strings.po)
+                        notify(get_string(30902))
+                    return
+
             # Find embedded source subtitle
             source_sub = self.find_source_subtitle(available_subs)
             embedded_lang = source_sub.get('language', 'en') if source_sub else None
@@ -516,7 +530,105 @@ class SubtitleTranslatorPlayer(xbmc.Player):
             
         except Exception as e:
             log(f"Error checking subtitles: {e}", level=xbmc.LOGERROR)
-    
+
+    def search_subtitle_via_addons(self):
+        """Search for subtitles using installed Kodi subtitle addons.
+
+        Uses ActivateWindow(SubtitleSearch) and waits for a subtitle
+        in the target language to appear via installed addons like
+        a4ksubtitles, opensubtitles, etc.
+
+        Returns True if a subtitle in the target language was found and loaded.
+        """
+        # Check if subtitle search is enabled
+        if not get_setting_bool('subtitle_search_enabled'):
+            log("Subtitle search via addons disabled")
+            return False
+
+        # Check if any subtitle addons are installed
+        try:
+            result = execute_jsonrpc('Addons.GetAddons', {
+                'type': 'xbmc.subtitle',
+                'enabled': True,
+                'properties': ['name']
+            })
+            addons = result.get('addons', []) if result else []
+            if not addons:
+                log("No subtitle search addons installed")
+                return False
+
+            addon_names = [a.get('name', a.get('addonid', '')) for a in addons]
+            log(f"Found subtitle addons: {', '.join(addon_names)}")
+        except Exception as e:
+            log(f"Error checking subtitle addons: {e}", level=xbmc.LOGWARNING)
+            return False
+
+        # Notify user
+        if self.show_notification:
+            target_name = self.get_language_name(self.target_language)
+            # 30900: "Searching for subtitles via addons..." (must be added to strings.po)
+            notify(get_string(30900))
+
+        # Open subtitle search window
+        log("Opening subtitle search window...")
+        xbmc.executebuiltin('ActivateWindow(SubtitleSearch)')
+
+        # Wait and check if subtitle was found
+        wait_seconds = get_setting_int('subtitle_search_wait_seconds')
+        if wait_seconds < 5:
+            wait_seconds = 15
+
+        log(f"Waiting up to {wait_seconds}s for subtitle addon results...")
+        check_interval = 2000  # Check every 2 seconds (milliseconds)
+        elapsed = 0
+
+        while elapsed < (wait_seconds * 1000):
+            xbmc.sleep(check_interval)
+            elapsed += check_interval
+
+            # Check if a subtitle in target language is now active
+            try:
+                player_result = execute_jsonrpc('Player.GetProperties', {
+                    'playerid': 1,
+                    'properties': ['subtitles', 'currentsubtitle', 'subtitleenabled']
+                })
+
+                if player_result:
+                    subtitle_enabled = player_result.get('subtitleenabled', False)
+                    current_sub = player_result.get('currentsubtitle', {})
+                    current_lang = current_sub.get('language', '')
+
+                    if subtitle_enabled and self._lang_match(current_lang, self.target_language):
+                        log(f"Subtitle found via addon! Language: {current_lang}")
+                        if self.show_notification:
+                            # 30901: "Subtitles found via addon!" (must be added to strings.po)
+                            notify(get_string(30901))
+                        # Close subtitle search window
+                        xbmc.executebuiltin('Dialog.Close(SubtitleSearch)')
+                        return True
+
+                    # Also check all available subs — one may have been downloaded but not selected
+                    all_subs = player_result.get('subtitles', [])
+                    for sub in all_subs:
+                        if self._lang_match(sub.get('language', ''), self.target_language):
+                            log(f"Target language subtitle available (not active): {sub}")
+                            # Select it
+                            sub_index = sub.get('index', 0)
+                            xbmc.executebuiltin(f'SetSubtitles({sub_index})')
+                            xbmc.sleep(500)
+                            if self.show_notification:
+                                # 30901: "Subtitles found via addon!" (must be added to strings.po)
+                                notify(get_string(30901))
+                            xbmc.executebuiltin('Dialog.Close(SubtitleSearch)')
+                            return True
+            except Exception as e:
+                log(f"Error checking subtitles during search: {e}", level=xbmc.LOGWARNING)
+
+        # Close subtitle search window if still open
+        xbmc.executebuiltin('Dialog.Close(SubtitleSearch)')
+        log("No subtitles found via addons within timeout")
+        return False
+
     def get_available_subtitles(self):
         """Get list of available subtitles for current video."""
         subtitles = []
@@ -1310,7 +1422,7 @@ class SubtitleTranslatorPlayer(xbmc.Player):
                 'index': 0,
                 'start': 4000,
                 'end': 7000,
-                'text': "github.com/yeager/\nkodi-subtitle-translator",
+                'text': "github.com/d4yronsc/\nkodi-subtitle-translator-pro",
             },
         ]
 

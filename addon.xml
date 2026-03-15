@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<addon id="service.subtitletranslator" name="Subtitle Translator" version="0.10.2" provider-name="yeager">
+<addon id="service.subtitletranslator.tamabin" name="Subtitle Translator Pro (TaMaBin)" version="1.0.0" provider-name="d4yronsc (fork of yeager)">
     <requires>
         <import addon="xbmc.python" version="3.0.0" />
         <import addon="script.module.requests" version="2.22.0" />
@@ -370,6 +370,20 @@ Tercih ettiğiniz dilde altyazı mevcut olmadığında, bu eklenti medya dosyas�
             <fanart>resources/fanart.png</fanart>
         </assets>
         <news>
+v1.0.0 (TaMaBin Pro Fork by d4yronsc)
+- NEW: 3-tier subtitle priority: Embedded → Addon Search → Translate
+- NEW: TaMaBin professional translation style (Netflix quality standards)
+- NEW: DeepL Free as default service (500K chars/month free)
+- NEW: Smart post-processing for Spanish: dialogue dashes, opening marks, orthography
+- NEW: Improved subtitle wrapping: upper line shorter, semantic segmentation
+- NEW: HTML tag preservation (<i>, <b>) for off-screen voices and on-screen text
+- NEW: Professional LLM prompts for OpenAI/Anthropic with genre-aware register
+- NEW: Updated Claude models to latest (Sonnet 4.6, Opus 4.6, Haiku 4.5)
+- NEW: Netflix timing constants (833ms min, 7s max, 17 cps)
+- IMPROVED: DeepL auto-informal for Spanish (tú form)
+- IMPROVED: Default target language set to Spanish
+- Based on yeager/kodi-subtitle-translator v0.10.2
+
 v0.10.1
 - Changed default translation service from Lingva to MyMemory (Lingva returns 403/429)
 - Changed ask_before_translate default to false for better UX

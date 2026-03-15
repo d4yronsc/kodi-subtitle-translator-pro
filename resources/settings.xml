@@ -10,10 +10,10 @@
                     <default>true</default>
                     <control type="toggle" />
                 </setting>
-                
+
                 <setting id="target_language" type="string" label="30202">
                     <level>0</level>
-                    <default>sv</default>
+                    <default>es</default>
                     <constraints>
                         <options>
                             <option label="Svenska">sv</option>
@@ -52,7 +52,7 @@
                 
                 <setting id="translation_service" type="string" label="30302">
                     <level>0</level>
-                    <default>mymemory</default>
+                    <default>deepl_free</default>
                     <constraints>
                         <options>
                             <option label="Lingva Translate (free)">lingva</option>
@@ -120,6 +120,38 @@
             </group>
 
             
+            <!-- Subtitle Search Priority -->
+            <group id="subtitle_priority" label="30903">
+                <setting id="subtitle_search_enabled" type="boolean" label="30904">
+                    <level>0</level>
+                    <default>true</default>
+                    <control type="toggle" />
+                </setting>
+
+                <setting id="subtitle_search_wait_seconds" type="integer" label="30905">
+                    <level>1</level>
+                    <default>15</default>
+                    <constraints>
+                        <minimum>5</minimum>
+                        <maximum>60</maximum>
+                    </constraints>
+                    <control type="slider" format="integer" />
+                </setting>
+
+                <setting id="subtitle_priority" type="string" label="30906">
+                    <level>0</level>
+                    <default>embedded_search_translate</default>
+                    <constraints>
+                        <options>
+                            <option label="Embedded → Search → Translate (recommended)">embedded_search_translate</option>
+                            <option label="Embedded → Translate (skip search)">embedded_translate</option>
+                            <option label="Search only (never translate)">search_only</option>
+                        </options>
+                    </constraints>
+                    <control type="list" format="string" />
+                </setting>
+            </group>
+
             <group id="standard" label="30110">
                 <setting id="ask_before_translate" type="boolean" label="30105">
                     <level>1</level>
@@ -194,12 +226,12 @@
                 
                 <setting id="anthropic_model" type="string" label="30382">
                     <level>1</level>
-                    <default>claude-3-haiku-20240307</default>
+                    <default>claude-sonnet-4-6</default>
                     <constraints>
                         <options>
-                            <option label="Claude 3 Haiku (fast)">claude-3-haiku-20240307</option>
-                            <option label="Claude 3.5 Sonnet">claude-3-5-sonnet-20241022</option>
-                            <option label="Claude 3 Opus (best)">claude-3-opus-20240229</option>
+                            <option label="Claude Haiku 4.5 (fast)">claude-haiku-4-5-20251001</option>
+                            <option label="Claude Sonnet 4.6 (recommended)">claude-sonnet-4-6</option>
+                            <option label="Claude Opus 4.6 (best)">claude-opus-4-6</option>
                         </options>
                     </constraints>
                     <control type="list" format="string" />

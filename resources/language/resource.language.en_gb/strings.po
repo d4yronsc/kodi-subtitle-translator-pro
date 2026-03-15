@@ -992,3 +992,32 @@ msgstr ""
 msgctxt "#30876"
 msgid "Download failed. Please install FFmpeg manually."
 msgstr ""
+
+# Subtitle search priority system (v1.0.0)
+msgctxt "#30900"
+msgid "Searching for subtitles via addons..."
+msgstr ""
+
+msgctxt "#30901"
+msgid "Subtitles found via addon!"
+msgstr ""
+
+msgctxt "#30902"
+msgid "No subtitles found, translation disabled by priority setting"
+msgstr ""
+
+msgctxt "#30903"
+msgid "Subtitle Priority"
+msgstr ""
+
+msgctxt "#30904"
+msgid "Search subtitles via addons"
+msgstr ""
+
+msgctxt "#30905"
+msgid "Search wait time (seconds)"
+msgstr ""
+
+msgctxt "#30906"
+msgid "Subtitle search priority"
+msgstr ""
