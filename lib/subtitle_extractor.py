@@ -500,7 +500,7 @@ class SubtitleExtractor:
             parser = self._get_mkv_parser()
             if parser:
                 try:
-                    content = parser.extract_subtitle(video_path, stream_index, output_format)
+                    content = parser.extract_subtitles(video_path, stream_index, output_format)
                     if content and len(content.strip()) > 10:
                         self._log(f"MKV streaming parser extracted {len(content)} bytes")
                         return content
