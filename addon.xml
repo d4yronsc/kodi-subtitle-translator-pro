@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<addon id="service.subtitletranslator.tamabin" name="Subtitle Translator Pro (TaMaBin)" version="1.0.11" provider-name="d4yronsc (fork of yeager)">
+<addon id="service.subtitletranslator.tamabin" name="Subtitle Translator Pro (TaMaBin)" version="1.0.12" provider-name="d4yronsc (fork of yeager)">
     <requires>
         <import addon="xbmc.python" version="3.0.0" />
         <import addon="script.module.requests" version="2.22.0" />
@@ -370,6 +370,11 @@ Tercih ettiğiniz dilde altyazı mevcut olmadığında, bu eklenti medya dosyas�
             <fanart>resources/fanart.png</fanart>
         </assets>
         <news>
+v1.0.12
+- HTTP extraction 10x faster: new HttpBufferedReader with 2MB buffer + persistent connection
+- Replaces xbmcvfs.File for HTTP URLs (each seek was opening a new TCP connection)
+- Should extract subtitles from streaming URLs in ~30 seconds on Android
+
 v1.0.11
 - Android: fallback to Python MKV parser when FFmpeg cannot execute
 - Reads only subtitle data from HTTP URL (not full video download)

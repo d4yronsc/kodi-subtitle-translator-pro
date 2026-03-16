@@ -54,6 +54,99 @@ CODEC_MAP = {
 }
 
 
+class HttpBufferedReader:
+    """HTTP reader using requests with persistent connection and large buffer.
+
+    Much faster than xbmcvfs.File for HTTP URLs because:
+    - Single persistent TCP connection (via requests.Session)
+    - 2MB buffer reduces number of HTTP requests
+    - Seeks within buffer are instant (no network I/O)
+    """
+
+    def __init__(self, url, buffer_size=2 * 1024 * 1024):
+        import requests as req
+        self._url = url
+        self._session = req.Session()
+        self._pos = 0
+        self._size = None
+        self._buffer = b''
+        self._buffer_start = 0
+        self._buffer_size = buffer_size
+        self._eof = False
+        # Get file size with HEAD request
+        try:
+            resp = self._session.head(url, timeout=10, allow_redirects=True)
+            self._size = int(resp.headers.get('Content-Length', 0))
+        except Exception:
+            self._size = 0
+
+    def tell(self):
+        return self._pos
+
+    def seek(self, offset):
+        """Seek to absolute position."""
+        self._pos = offset
+        self._eof = False
+        # Check if new position is within current buffer
+        buf_end = self._buffer_start + len(self._buffer)
+        if self._buffer_start <= offset < buf_end:
+            return True
+        # Buffer miss — will fetch on next read
+        return True
+
+    def read(self, size):
+        """Read exactly size bytes (or fewer at EOF)."""
+        if self._eof:
+            return b''
+
+        # Check if data is fully in buffer
+        buf_end = self._buffer_start + len(self._buffer)
+        if self._buffer_start <= self._pos and self._pos + size <= buf_end:
+            offset = self._pos - self._buffer_start
+            data = self._buffer[offset:offset + size]
+            self._pos += len(data)
+            return data
+
+        # Need to fetch from HTTP
+        fetch_start = self._pos
+        fetch_size = max(size, self._buffer_size)
+        if self._size > 0:
+            fetch_end = min(fetch_start + fetch_size - 1, self._size - 1)
+        else:
+            fetch_end = fetch_start + fetch_size - 1
+
+        try:
+            headers = {'Range': f'bytes={fetch_start}-{fetch_end}'}
+            resp = self._session.get(self._url, headers=headers, timeout=30)
+            if resp.status_code in (200, 206):
+                self._buffer = resp.content
+                self._buffer_start = fetch_start
+                data = self._buffer[:size]
+                self._pos += len(data)
+                if len(resp.content) < fetch_size:
+                    self._eof = True
+                return data
+            else:
+                self._eof = True
+                return b''
+        except Exception:
+            self._eof = True
+            return b''
+
+    def readBytes(self, size):
+        """Compatibility with xbmcvfs.File interface."""
+        return self.read(size)
+
+    def size(self):
+        return self._size or 0
+
+    def close(self):
+        try:
+            self._session.close()
+        except Exception:
+            pass
+
+
 class BufferedReader:
     """Buffered reader wrapper around xbmcvfs.File for efficient network I/O."""
 
@@ -285,9 +378,17 @@ class MKVStreamingParser:
         self._log(f"Opening {file_path}")
 
         file_obj = None
+        http_reader = None
         try:
-            file_obj = xbmcvfs.File(file_path)
-            reader = BufferedReader(file_obj)
+            # Use HttpBufferedReader for HTTP URLs (much faster than xbmcvfs.File)
+            is_http = file_path.lower().startswith(('http://', 'https://'))
+            if is_http:
+                self._log("Using HTTP buffered reader (2MB buffer, persistent connection)")
+                http_reader = HttpBufferedReader(file_path)
+                reader = http_reader
+            else:
+                file_obj = xbmcvfs.File(file_path)
+                reader = BufferedReader(file_obj)
 
             # Step 1: Validate EBML header
             if not self._read_ebml_header(reader):
@@ -365,6 +466,11 @@ class MKVStreamingParser:
             self._log(traceback.format_exc(), xbmc.LOGERROR)
             return None
         finally:
+            if http_reader:
+                try:
+                    http_reader.close()
+                except Exception:
+                    pass
             if file_obj:
                 try:
                     file_obj.close()
