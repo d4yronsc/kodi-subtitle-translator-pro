@@ -505,9 +505,20 @@ class SubtitleExtractor:
             Subtitle content as string, or None on failure
         """
         self._log(f"Extracting subtitle stream {stream_index} from {video_path}")
-        
-        # Try MKV streaming parser first for MKV/WebM files (Cues-based seeking)
-        if self._is_mkv_file(video_path):
+
+        is_http = video_path.lower().startswith(('http://', 'https://'))
+
+        # For HTTP/HTTPS URLs: use FFmpeg directly (it handles HTTP natively)
+        # Python MKV parsers are too slow for HTTP — each seek = new HTTP connection
+        if is_http and self.ffmpeg_path:
+            self._log("HTTP URL detected — using FFmpeg directly (fastest for streaming)")
+            content = self._extract_with_ffmpeg_direct(video_path, stream_index, output_format)
+            if content:
+                return content
+            self._log("FFmpeg direct extraction failed, trying Python parsers as fallback")
+
+        # For local files and SMB/NFS: try MKV streaming parser (Cues-based seeking)
+        if not is_http and self._is_mkv_file(video_path):
             parser = self._get_mkv_parser()
             if parser:
                 try:
@@ -518,8 +529,8 @@ class SubtitleExtractor:
                     self._log("MKV streaming parser returned no content, trying fallbacks")
                 except Exception as e:
                     self._log(f"MKV streaming parser failed: {e}, trying fallbacks", xbmc.LOGWARNING)
-        
-        # For network paths, try legacy pure Python extractor as second attempt
+
+        # For network paths (SMB/NFS), try legacy pure Python extractor
         network_prefixes = ('smb://', 'nfs://', 'ftp://', 'sftp://')
         if video_path.lower().startswith(network_prefixes):
             self._log("Network path — trying legacy MKV extractor")
@@ -534,15 +545,14 @@ class SubtitleExtractor:
                     self._log("Legacy MKV extractor returned no content, falling back to FFmpeg")
             except Exception as e:
                 self._log(f"Legacy MKV extractor failed: {e}, falling back to FFmpeg", xbmc.LOGWARNING)
-        
-        # Also try Python extractor on Android (avoids FFmpeg exec permission issues)
-        # Includes HTTP/HTTPS streaming URLs — FFmpeg can't execute on Android scoped storage
-        if self._is_android:
-            self._log("Android — trying pure Python MKV extractor to avoid exec permission issues")
+
+        # For Android local files, try Python extractor (avoids FFmpeg exec permission issues)
+        if self._is_android and not is_http:
+            self._log("Android local file — trying pure Python MKV extractor")
             try:
                 from lib.mkv_subtitle_extractor import MkvSubtitleExtractor
                 mkv_ext = MkvSubtitleExtractor()
-                if video_path.lower().startswith(('http://', 'https://')) or video_path.lower().startswith(network_prefixes):
+                if video_path.lower().startswith(network_prefixes):
                     content = mkv_ext.extract_from_vfs(video_path, stream_index)
                 elif os.path.isfile(video_path):
                     content = mkv_ext.extract_from_file(video_path, stream_index)
@@ -697,6 +707,70 @@ class SubtitleExtractor:
             except:
                 pass
     
+    def _extract_with_ffmpeg_direct(self, video_url, stream_index, output_format):
+        """
+        Extract subtitle using FFmpeg directly from HTTP URL.
+        FFmpeg handles HTTP natively — no need to download the file first.
+        Much faster than Python MKV parsers for streaming URLs.
+        """
+        if not self.ffmpeg_path:
+            return None
+
+        output_path = self._make_temp_file(suffix=f'.{output_format}')
+
+        try:
+            cmd = [
+                self.ffmpeg_path,
+                '-y',
+                '-hide_banner',
+                '-loglevel', 'warning',
+                '-i', video_url,
+                '-map', f'0:s:{stream_index}',
+                '-c:s', self._get_codec(output_format),
+                output_path
+            ]
+
+            self._log(f"FFmpeg direct HTTP extraction: stream {stream_index}")
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120  # 2 minutes should be plenty for subtitle extraction
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                self._log(f"FFmpeg direct failed (code {result.returncode}): {error_msg}", xbmc.LOGWARNING)
+                return None
+
+            if not os.path.exists(output_path):
+                self._log("FFmpeg direct did not create output file", xbmc.LOGWARNING)
+                return None
+
+            with open(output_path, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+
+            if not content or len(content.strip()) < 10:
+                self._log("FFmpeg direct produced empty output", xbmc.LOGWARNING)
+                return None
+
+            self._log(f"FFmpeg direct extracted {len(content)} bytes from HTTP URL")
+            return content
+
+        except subprocess.TimeoutExpired:
+            self._log("FFmpeg direct timed out after 2 minutes", xbmc.LOGWARNING)
+            return None
+        except Exception as e:
+            self._log(f"FFmpeg direct error: {e}", xbmc.LOGWARNING)
+            return None
+        finally:
+            try:
+                if os.path.exists(output_path):
+                    os.unlink(output_path)
+            except:
+                pass
+
     def _get_codec(self, format_name):
         """Get FFmpeg codec name for subtitle format."""
         codecs = {
