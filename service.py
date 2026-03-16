@@ -159,6 +159,7 @@ class SubtitleTranslatorPlayer(xbmc.Player):
         self.reload_settings()
         self.current_file = None
         self.translation_in_progress = False
+        self.translated_file = None  # Track the file we already translated for
     
     def reload_settings(self):
         """Reload settings from addon configuration."""
@@ -340,9 +341,14 @@ class SubtitleTranslatorPlayer(xbmc.Player):
             return
         
         try:
-            self.current_file = self.getPlayingFile()
-            log(f"Playback started: {self.current_file}")
-            
+            new_file = self.getPlayingFile()
+            log(f"Playback started: {new_file}")
+
+            # Only reset translated_file flag if it's a different video
+            if new_file != self.current_file:
+                self.translated_file = None
+            self.current_file = new_file
+
             # Wait a moment for Kodi to load subtitle info
             xbmc.sleep(2000)
             
@@ -355,6 +361,11 @@ class SubtitleTranslatorPlayer(xbmc.Player):
         """Check if translation is needed and perform it."""
         if self.translation_in_progress:
             log("Translation already in progress, skipping")
+            return
+
+        # Don't re-process a file we already translated for
+        if self.translated_file and self.translated_file == self.current_file:
+            log(f"Already translated for this file, skipping: {self.current_file}")
             return
         
         try:
@@ -1465,48 +1476,96 @@ class SubtitleTranslatorPlayer(xbmc.Player):
     
     def load_subtitle(self, path):
         """Load a subtitle file into the player and enable it."""
+        # Mark this file as already translated so we don't re-trigger
+        self.translated_file = self.current_file
+
+        log(f"Loading translated subtitle: {path}")
+
+        # Method 1: Use setSubtitles to add the external subtitle
         self.setSubtitles(path)
-        
-        # Enable subtitle visibility and select the new subtitle
-        xbmc.sleep(500)  # Give Kodi time to load the subtitle
-        
+        xbmc.sleep(1000)  # Give Kodi enough time to register the subtitle
+
+        # Method 2: Disable all current subtitles first, then enable ours
         try:
-            # Get available subtitles to find the index of the one we just added
+            # First, turn off current subtitle to force a switch
+            self.showSubtitles(False)
+            xbmc.sleep(300)
+
+            # Get the updated subtitle list
             result = execute_jsonrpc('Player.GetProperties', {
                 'playerid': 1,
                 'properties': ['subtitles', 'currentsubtitle', 'subtitleenabled']
             })
-            
+
             if result and 'result' in result:
                 subtitles = result['result'].get('subtitles', [])
-                
-                # Find our subtitle (usually the last one added, or match by name)
-                new_sub_index = len(subtitles) - 1 if subtitles else 0
-                
-                # Look for exact path match
+                log(f"Available subtitles after adding: {subtitles}")
+
+                # Find our translated subtitle - search from the end (most recently added)
+                new_sub_index = -1
+                basename = os.path.basename(path)
+
                 for i, sub in enumerate(subtitles):
-                    if sub.get('name', '').endswith(os.path.basename(path)):
+                    sub_name = sub.get('name', '')
+                    # Match by filename or by target language in external subs
+                    if basename in sub_name or sub_name.endswith(basename):
                         new_sub_index = i
+                        log(f"Found translated subtitle by name match at index {i}: {sub_name}")
                         break
-                
-                # Enable subtitles and select the new one
-                execute_jsonrpc('Player.SetSubtitle', {
-                    'playerid': 1,
-                    'subtitle': new_sub_index,
-                    'enable': True
-                })
-                log(f"Selected subtitle index {new_sub_index} and enabled display")
-            else:
-                # Fallback: just enable subtitles via built-in
-                xbmc.executebuiltin('ActivateWindow(SubtitleSearch)')
-                xbmc.sleep(100)
-                xbmc.executebuiltin('Action(Close)')
-                
+
+                # If no name match, look for external subtitle with target language
+                if new_sub_index == -1:
+                    for i, sub in enumerate(subtitles):
+                        if sub.get('isexternal', False) and self._lang_match(sub.get('language', ''), self.target_language):
+                            new_sub_index = i
+                            log(f"Found translated subtitle by language match at index {i}: {sub}")
+                            break
+
+                # Last resort: use the last subtitle (most recently added)
+                if new_sub_index == -1 and subtitles:
+                    new_sub_index = len(subtitles) - 1
+                    log(f"Using last subtitle index as fallback: {new_sub_index}")
+
+                if new_sub_index >= 0:
+                    # Select the translated subtitle
+                    execute_jsonrpc('Player.SetSubtitle', {
+                        'playerid': 1,
+                        'subtitle': new_sub_index,
+                        'enable': True
+                    })
+                    xbmc.sleep(500)
+
+                    # Force enable visibility
+                    self.showSubtitles(True)
+
+                    # Verify it stuck
+                    xbmc.sleep(500)
+                    verify = execute_jsonrpc('Player.GetProperties', {
+                        'playerid': 1,
+                        'properties': ['currentsubtitle', 'subtitleenabled']
+                    })
+                    if verify and 'result' in verify:
+                        current = verify['result'].get('currentsubtitle', {})
+                        enabled = verify['result'].get('subtitleenabled', False)
+                        log(f"Verification - Current subtitle: {current}, Enabled: {enabled}")
+
+                        # If Kodi switched back, force again
+                        if current.get('index', -1) != new_sub_index:
+                            log(f"Kodi switched back! Forcing subtitle index {new_sub_index} again")
+                            execute_jsonrpc('Player.SetSubtitle', {
+                                'playerid': 1,
+                                'subtitle': new_sub_index,
+                                'enable': True
+                            })
+                            self.showSubtitles(True)
+
+                    log(f"Selected subtitle index {new_sub_index} and enabled display")
+
         except Exception as e:
             log(f"Could not auto-select subtitle: {e}", level=xbmc.LOGWARNING)
-        
-        # Ensure subtitle visibility is on
-        self.showSubtitles(True)
+            # Fallback: just make sure subtitles are visible
+            self.showSubtitles(True)
+
         log(f"Loaded and activated subtitle: {path}")
     
     def get_service_config(self):
