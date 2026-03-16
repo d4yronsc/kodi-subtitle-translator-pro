@@ -180,13 +180,98 @@ def get_kodi_temp_path():
 
 class SubtitleExtractor:
     """Extract subtitles from video files using FFmpeg."""
-    
+
     def __init__(self, ffmpeg_path=None):
         self._is_android = is_android()
+        self._executable_ffmpeg = None  # Cached executable FFmpeg path (Android internal storage)
         self.ffmpeg_path = ffmpeg_path or self._find_ffmpeg()
         self._mkv_parser = None
         self._log(f"Initialized with FFmpeg: {self.ffmpeg_path} (Android: {self._is_android})")
     
+    def _get_executable_ffmpeg(self):
+        """Get an executable FFmpeg path on Android.
+
+        Android mounts /storage/emulated/0/ with noexec flag, so binaries there
+        can't be executed even with chmod 755. Solution: copy to the app's internal
+        cache directory (/data/user/0/org.xbmc.kodi/cache/) which allows execution.
+        """
+        if self._executable_ffmpeg and os.path.isfile(self._executable_ffmpeg):
+            return self._executable_ffmpeg
+
+        if not self.ffmpeg_path or not os.path.isfile(self.ffmpeg_path):
+            return self.ffmpeg_path
+
+        # If not on Android, just return the original path
+        if not self._is_android:
+            self._executable_ffmpeg = self.ffmpeg_path
+            return self.ffmpeg_path
+
+        # If already executable, use it directly
+        try:
+            subprocess.run([self.ffmpeg_path, '-version'], capture_output=True, timeout=5)
+            self._executable_ffmpeg = self.ffmpeg_path
+            return self.ffmpeg_path
+        except PermissionError:
+            pass
+        except Exception:
+            # Other errors (not permission) — might still work
+            self._executable_ffmpeg = self.ffmpeg_path
+            return self.ffmpeg_path
+
+        # FFmpeg is on noexec storage — copy to internal cache
+        self._log("FFmpeg on noexec storage, copying to internal cache for execution")
+
+        # Try multiple internal directories that allow execution
+        internal_dirs = []
+
+        # 1. Try to find the app's internal cache via Python's own path
+        for p in sys.path:
+            if '/data/' in p and '/cache/' in p:
+                # e.g., /data/user/0/org.xbmc.kodi/cache/apk/...
+                cache_idx = p.index('/cache/') + len('/cache/')
+                internal_cache = p[:cache_idx]
+                internal_dirs.append(internal_cache)
+                break
+
+        # 2. Common Kodi internal paths
+        for app_id in ['org.xbmc.kodi', 'tv.kodi.android']:
+            internal_dirs.extend([
+                f'/data/user/0/{app_id}/cache',
+                f'/data/data/{app_id}/cache',
+                f'/data/user/0/{app_id}/files',
+                f'/data/data/{app_id}/files',
+            ])
+
+        import shutil
+        for internal_dir in internal_dirs:
+            if not os.path.isdir(internal_dir):
+                continue
+            dest = os.path.join(internal_dir, 'ffmpeg_exec')
+            try:
+                shutil.copy2(self.ffmpeg_path, dest)
+                os.chmod(dest, 0o755)
+                # Test if it's actually executable now
+                result = subprocess.run([dest, '-version'], capture_output=True, timeout=5)
+                if result.returncode == 0:
+                    self._log(f"FFmpeg copied to executable location: {dest}")
+                    self._executable_ffmpeg = dest
+                    return dest
+            except PermissionError:
+                self._log(f"Internal dir {internal_dir} also noexec, trying next", xbmc.LOGDEBUG)
+                try:
+                    os.unlink(dest)
+                except OSError:
+                    pass
+            except Exception as e:
+                self._log(f"Failed to setup FFmpeg in {internal_dir}: {e}", xbmc.LOGDEBUG)
+                try:
+                    os.unlink(dest)
+                except OSError:
+                    pass
+
+        self._log("Could not find executable location for FFmpeg on Android", xbmc.LOGWARNING)
+        return self.ffmpeg_path
+
     def _is_mkv_file(self, path):
         """Check if file is an MKV/WebM container.
 
@@ -516,6 +601,10 @@ class SubtitleExtractor:
             if content:
                 return content
             self._log("FFmpeg direct extraction failed, trying Python parsers as fallback")
+            # On Android, if FFmpeg can't execute, do NOT fall through to copy 1.7GB video
+            if self._is_android and self._executable_ffmpeg is None:
+                self._log("FFmpeg not executable on Android — cannot extract from HTTP URL", xbmc.LOGERROR)
+                return None
 
         # For local files and SMB/NFS: try MKV streaming parser (Cues-based seeking)
         if not is_http and self._is_mkv_file(video_path):
@@ -581,8 +670,10 @@ class SubtitleExtractor:
         try:
             # Build FFmpeg command
             # Use 0:s:N to select the Nth subtitle stream (relative index)
+            # On Android, use the executable FFmpeg path
+            ffmpeg_exe = self._get_executable_ffmpeg() if self._is_android else self.ffmpeg_path
             cmd = [
-                self.ffmpeg_path,
+                ffmpeg_exe,
                 '-y',  # Overwrite output
                 '-hide_banner',
                 '-loglevel', 'warning',
@@ -716,19 +807,14 @@ class SubtitleExtractor:
         if not self.ffmpeg_path:
             return None
 
-        # Ensure FFmpeg is executable (Android scoped storage may reset permissions)
-        if os.path.isfile(self.ffmpeg_path) and not os.access(self.ffmpeg_path, os.X_OK):
-            self._log(f"FFmpeg not executable, fixing permissions: {self.ffmpeg_path}")
-            try:
-                os.chmod(self.ffmpeg_path, 0o755)
-            except OSError as e:
-                self._log(f"chmod failed: {e}", xbmc.LOGWARNING)
+        # On Android, get FFmpeg from an executable location (internal storage)
+        ffmpeg_exe = self._get_executable_ffmpeg() if self._is_android else self.ffmpeg_path
 
         output_path = self._make_temp_file(suffix=f'.{output_format}')
 
         try:
             cmd = [
-                self.ffmpeg_path,
+                ffmpeg_exe,
                 '-y',
                 '-hide_banner',
                 '-loglevel', 'warning',
