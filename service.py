@@ -992,13 +992,21 @@ class SubtitleTranslatorPlayer(xbmc.Player):
                     f"Try a different service in settings."
                 )
             
+            # TaMaBin post-processing for Spanish (88%)
+            try:
+                from lib.tamabin_postprocess import postprocess_spanish
+                translated_entries = postprocess_spanish(translated_entries, self.target_language)
+                log(f"TaMaBin post-processing applied for '{self.target_language}'")
+            except Exception as e:
+                log(f"TaMaBin post-processing skipped: {e}", level=xbmc.LOGWARNING)
+
             # Format output (90%)
             progress.set_stage('format', f"{get_string(30708)} (90%)")  # Parsing/formatting
             get_debug_logger().debug(f"Generating {self.subtitle_format} output", 'format')
-            
+
             # Determine service label early for disclaimer
             service_label = actual_service.replace('_', ' ').title()
-            
+
             # Add disclaimer as first subtitle entries
             disclaimer_entries = self._make_disclaimer(service_label)
             # Shift existing indices
@@ -1008,12 +1016,12 @@ class SubtitleTranslatorPlayer(xbmc.Player):
             for i, d in enumerate(disclaimer_entries):
                 d['index'] = i + 1
             translated_entries = disclaimer_entries + translated_entries
-            
+
             output_content = parser.generate(
                 translated_entries,
                 self.subtitle_format
             )
-            
+
             # Save subtitle (95%)
             progress.set_stage('save', f"{get_string(30711)} (95%)")  # "Saving translated subtitles..."
             output_path = self.save_subtitle(output_content, cache_key)
@@ -1274,13 +1282,21 @@ class SubtitleTranslatorPlayer(xbmc.Player):
             if success_rate < 0.5:
                 raise Exception(f"Translation failed: only {successful_batches}/{total_batches} batches translated successfully")
             
+            # TaMaBin post-processing for Spanish (88%)
+            try:
+                from lib.tamabin_postprocess import postprocess_spanish
+                translated_entries = postprocess_spanish(translated_entries, self.target_language)
+                log(f"TaMaBin post-processing applied for '{self.target_language}'")
+            except Exception as e:
+                log(f"TaMaBin post-processing skipped: {e}", level=xbmc.LOGWARNING)
+
             # Format output
             progress.set_stage('format', f"{get_string(30708)} (90%)")
             get_debug_logger().debug(f"Generating {self.subtitle_format} output", 'format')
-            
+
             # Determine service label early for disclaimer
             service_label = actual_service.replace('_', ' ').title()
-            
+
             # Add disclaimer as first subtitle entries
             disclaimer_entries = self._make_disclaimer(service_label)
             num_disclaimer = len(disclaimer_entries)
@@ -1289,12 +1305,12 @@ class SubtitleTranslatorPlayer(xbmc.Player):
             for i, d in enumerate(disclaimer_entries):
                 d['index'] = i + 1
             translated_entries = disclaimer_entries + translated_entries
-            
+
             output_content = parser.generate(
                 translated_entries,
                 self.subtitle_format
             )
-            
+
             # Save subtitle
             progress.set_stage('save', f"{get_string(30711)} (95%)")
             output_path = self.save_subtitle(output_content, cache_key)
