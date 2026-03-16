@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<addon id="service.subtitletranslator.tamabin" name="Subtitle Translator Pro (TaMaBin)" version="1.0.10" provider-name="d4yronsc (fork of yeager)">
+<addon id="service.subtitletranslator.tamabin" name="Subtitle Translator Pro (TaMaBin)" version="1.0.11" provider-name="d4yronsc (fork of yeager)">
     <requires>
         <import addon="xbmc.python" version="3.0.0" />
         <import addon="script.module.requests" version="2.22.0" />
@@ -370,6 +370,11 @@ Tercih ettiğiniz dilde altyazı mevcut olmadığında, bu eklenti medya dosyas�
             <fanart>resources/fanart.png</fanart>
         </assets>
         <news>
+v1.0.11
+- Android: fallback to Python MKV parser when FFmpeg cannot execute
+- Reads only subtitle data from HTTP URL (not full video download)
+- Works on NVIDIA Shield and other restrictive Android devices
+
 v1.0.10
 - Fix FFmpeg execution on Android (noexec on external storage)
 - Copy FFmpeg to internal app cache for execution on Android

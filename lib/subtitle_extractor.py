@@ -601,9 +601,23 @@ class SubtitleExtractor:
             if content:
                 return content
             self._log("FFmpeg direct extraction failed, trying Python parsers as fallback")
-            # On Android, if FFmpeg can't execute, do NOT fall through to copy 1.7GB video
+            # On Android, if FFmpeg can't execute, try MKV streaming parser for HTTP
+            # (reads only subtitle data via xbmcvfs.File, NOT the full video)
             if self._is_android and self._executable_ffmpeg is None:
-                self._log("FFmpeg not executable on Android — cannot extract from HTTP URL", xbmc.LOGERROR)
+                self._log("FFmpeg not executable on Android — trying MKV streaming parser for HTTP")
+                if self._is_mkv_file(video_path):
+                    parser = self._get_mkv_parser()
+                    if parser:
+                        try:
+                            content = parser.extract_subtitles(video_path, stream_index, output_format)
+                            if content and len(content.strip()) > 10:
+                                self._log(f"MKV streaming parser extracted {len(content)} bytes from HTTP")
+                                return content
+                            self._log("MKV streaming parser returned no content from HTTP")
+                        except Exception as e:
+                            self._log(f"MKV streaming parser failed on HTTP: {e}", xbmc.LOGWARNING)
+                # If MKV parser also failed, don't fall through to copy 1.7GB
+                self._log("Cannot extract subtitles on Android — no executable FFmpeg and MKV parser failed", xbmc.LOGERROR)
                 return None
 
         # For local files and SMB/NFS: try MKV streaming parser (Cues-based seeking)
