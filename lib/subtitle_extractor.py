@@ -524,13 +524,14 @@ class SubtitleExtractor:
             except Exception as e:
                 self._log(f"Legacy MKV extractor failed: {e}, falling back to FFmpeg", xbmc.LOGWARNING)
         
-        # Also try Python extractor for local files on Android (avoids exec permission issues)
-        if self._is_android and not video_path.lower().startswith(('http://', 'https://')):
+        # Also try Python extractor on Android (avoids FFmpeg exec permission issues)
+        # Includes HTTP/HTTPS streaming URLs — FFmpeg can't execute on Android scoped storage
+        if self._is_android:
             self._log("Android — trying pure Python MKV extractor to avoid exec permission issues")
             try:
                 from lib.mkv_subtitle_extractor import MkvSubtitleExtractor
                 mkv_ext = MkvSubtitleExtractor()
-                if video_path.lower().startswith(network_prefixes):
+                if video_path.lower().startswith(('http://', 'https://')) or video_path.lower().startswith(network_prefixes):
                     content = mkv_ext.extract_from_vfs(video_path, stream_index)
                 elif os.path.isfile(video_path):
                     content = mkv_ext.extract_from_file(video_path, stream_index)
