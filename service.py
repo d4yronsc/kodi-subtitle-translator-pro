@@ -558,12 +558,37 @@ class SubtitleTranslatorPlayer(xbmc.Player):
 
         # Check if any subtitle addons are installed
         try:
-            result = execute_jsonrpc('Addons.GetAddons', {
-                'type': 'xbmc.subtitle',
-                'enabled': True,
-                'properties': ['name']
-            })
-            addons = result.get('addons', []) if result else []
+            # Try multiple content types - Kodi versions use different enum values
+            addons = []
+            for addon_type in ['xbmc.subtitle.module', 'xbmc.python.subtitles', 'unknown']:
+                try:
+                    result = execute_jsonrpc('Addons.GetAddons', {
+                        'type': addon_type,
+                        'enabled': True,
+                        'properties': ['name']
+                    })
+                    if result and result.get('addons'):
+                        addons.extend(result['addons'])
+                except Exception:
+                    pass
+
+            # Fallback: get ALL addons and filter for subtitle-related ones
+            if not addons:
+                try:
+                    result = execute_jsonrpc('Addons.GetAddons', {
+                        'enabled': True,
+                        'properties': ['name', 'type']
+                    })
+                    if result and result.get('addons'):
+                        for addon in result['addons']:
+                            aid = addon.get('addonid', '')
+                            atype = addon.get('type', '')
+                            if ('subtitle' in aid.lower() or 'subtitle' in atype.lower()
+                                    or aid.startswith('service.subtitles.')):
+                                addons.append(addon)
+                except Exception:
+                    pass
+
             if not addons:
                 log("No subtitle search addons installed")
                 return False
@@ -1455,8 +1480,8 @@ class SubtitleTranslatorPlayer(xbmc.Player):
         
         output_path = cache_file
         
-        # Optionally save alongside video
-        if self.save_alongside:
+        # Optionally save alongside video (skip for streaming URLs)
+        if self.save_alongside and not self.current_file.startswith(('http://', 'https://')):
             video_dir = os.path.dirname(self.current_file)
             video_name = os.path.splitext(os.path.basename(self.current_file))[0]
             alongside_path = self._normalize_path(os.path.join(
