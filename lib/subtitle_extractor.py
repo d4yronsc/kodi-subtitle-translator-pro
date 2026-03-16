@@ -188,9 +188,20 @@ class SubtitleExtractor:
         self._log(f"Initialized with FFmpeg: {self.ffmpeg_path} (Android: {self._is_android})")
     
     def _is_mkv_file(self, path):
-        """Check if file is an MKV/WebM container."""
-        ext = os.path.splitext(path.split('?')[0])[1].lower()
-        return ext in ('.mkv', '.webm')
+        """Check if file is an MKV/WebM container.
+
+        For streaming URLs without extension (Real-Debrid, Torbox, etc.),
+        assume MKV since that's the most common container for cached torrents.
+        """
+        clean_path = path.split('?')[0]
+        ext = os.path.splitext(clean_path)[1].lower()
+        if ext in ('.mkv', '.webm'):
+            return True
+        # Streaming URLs without extension — assume MKV (try fast parser first)
+        if path.lower().startswith(('http://', 'https://')) and ext == '':
+            self._log(f"No file extension in URL, assuming MKV container")
+            return True
+        return False
     
     def _get_mkv_parser(self):
         """Lazy-load MKV streaming parser."""
