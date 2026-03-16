@@ -255,8 +255,12 @@ def _adjust_timings(entries):
     - Minimum duration: 833ms (5/6 of a second)
     - Maximum duration: 7000ms
     - Maximum reading speed: 17 CPS
+    - Minimum gap between subtitles: 83ms (2 frames at 24fps)
+    - Never extend a subtitle's end past the next subtitle's start
     """
-    for entry in entries:
+    MIN_GAP_MS = 83  # Minimum gap between consecutive subtitles (Netflix: 2 frames)
+
+    for i, entry in enumerate(entries):
         start = entry.get('start', 0)
         end = entry.get('end', 0)
         text = entry.get('text', '')
@@ -265,16 +269,23 @@ def _adjust_timings(entries):
         if duration <= 0:
             continue
 
+        # Determine the maximum allowed end time (don't overlap next subtitle)
+        if i + 1 < len(entries):
+            next_start = entries[i + 1].get('start', 0)
+            max_end = next_start - MIN_GAP_MS
+        else:
+            max_end = start + MAX_DURATION_MS
+
         # Strip HTML tags for character count
         visible_text = re.sub(r'<[^>]+>', '', text)
         char_count = len(visible_text.replace('\n', ''))
 
-        # Enforce minimum duration
+        # Enforce minimum duration (but respect next subtitle boundary)
         if duration < MIN_DURATION_MS:
-            entry['end'] = start + MIN_DURATION_MS
+            entry['end'] = min(start + MIN_DURATION_MS, max_end)
 
         # Enforce maximum duration
-        if duration > MAX_DURATION_MS:
+        if (entry['end'] - start) > MAX_DURATION_MS:
             entry['end'] = start + MAX_DURATION_MS
 
         # Check CPS (characters per second)
@@ -284,8 +295,13 @@ def _adjust_timings(entries):
             if cps > MAX_CPS and char_count > 0:
                 # Extend duration to meet CPS limit
                 needed_duration = int((char_count / MAX_CPS) * 1000)
-                # Don't exceed MAX_DURATION though
+                # Don't exceed MAX_DURATION or next subtitle's start
                 new_end = start + min(needed_duration, MAX_DURATION_MS)
+                new_end = min(new_end, max_end)
                 # Only extend, never shrink
                 if new_end > entry['end']:
                     entry['end'] = new_end
+
+        # Final safety: ensure we never overlap the next subtitle
+        if entry['end'] > max_end:
+            entry['end'] = max_end
