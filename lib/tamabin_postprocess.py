@@ -53,8 +53,7 @@ def postprocess_spanish(entries, target_language='es'):
 
         entry['text'] = text.strip()
 
-    # Timing adjustments
-    _adjust_timings(entries)
+    # Timing: keep original start/end from source subtitle (already synced with audio)
 
     return entries
 

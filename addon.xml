@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<addon id="service.subtitletranslator.tamabin" name="Subtitle Translator Pro (TaMaBin)" version="1.0.2" provider-name="d4yronsc (fork of yeager)">
+<addon id="service.subtitletranslator.tamabin" name="Subtitle Translator Pro (TaMaBin)" version="1.0.3" provider-name="d4yronsc (fork of yeager)">
     <requires>
         <import addon="xbmc.python" version="3.0.0" />
         <import addon="script.module.requests" version="2.22.0" />
@@ -370,6 +370,10 @@ Tercih ettiğiniz dilde altyazı mevcut olmadığında, bu eklenti medya dosyas�
             <fanart>resources/fanart.png</fanart>
         </assets>
         <news>
+v1.0.3
+- Keep original subtitle timing (no more overlap/stacking issues)
+- Only translate text + apply TaMaBin post-processing, timings untouched
+
 v1.0.2
 - DeepL now targets ES-419 (Latin American Spanish) instead of generic ES
 - Eliminates Spain-specific expressions (vale, tío, vosotros)
