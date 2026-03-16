@@ -149,7 +149,9 @@ class DeepLTranslator(BaseTranslator):
         if formality == 'default' and target.upper().startswith('ES'):
             formality = 'less'
 
-        if formality != 'default' and target in ['DE', 'FR', 'IT', 'ES', 'NL', 'PL', 'PT-PT', 'PT-BR', 'RU']:
+        # DeepL supports formality for these target languages (including regional variants)
+        formality_targets = ['DE', 'FR', 'IT', 'ES', 'ES-419', 'NL', 'PL', 'PT-PT', 'PT-BR', 'RU']
+        if formality != 'default' and target.upper() in formality_targets:
             data['formality'] = formality
         
         headers = {
@@ -214,7 +216,7 @@ class DeepLTranslator(BaseTranslator):
         """Map language code to DeepL format."""
         mapping = {
             'en': 'EN', 'sv': 'SV', 'de': 'DE', 'fr': 'FR',
-            'es': 'ES', 'it': 'IT', 'nl': 'NL', 'pl': 'PL',
+            'es': 'ES-419', 'it': 'IT', 'nl': 'NL', 'pl': 'PL',
             'pt': 'PT-PT', 'ru': 'RU', 'ja': 'JA', 'zh': 'ZH',
             'da': 'DA', 'fi': 'FI', 'no': 'NB', 'ko': 'KO'
         }

@@ -1500,9 +1500,11 @@ class SubtitleTranslatorPlayer(xbmc.Player):
         if self.save_alongside and not self.current_file.startswith(('http://', 'https://')):
             video_dir = os.path.dirname(self.current_file)
             video_name = os.path.splitext(os.path.basename(self.current_file))[0]
+            # Use spa-419 tag for Latin American Spanish, otherwise use target language code
+            lang_tag = 'spa-419' if self.target_language == 'es' else self.target_language
             alongside_path = self._normalize_path(os.path.join(
                 video_dir,
-                f"{video_name}.{self.target_language}.{self.subtitle_format}"
+                f"{video_name}.{lang_tag}.{self.subtitle_format}"
             ))
             
             try:
