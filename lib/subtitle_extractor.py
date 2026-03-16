@@ -716,6 +716,14 @@ class SubtitleExtractor:
         if not self.ffmpeg_path:
             return None
 
+        # Ensure FFmpeg is executable (Android scoped storage may reset permissions)
+        if os.path.isfile(self.ffmpeg_path) and not os.access(self.ffmpeg_path, os.X_OK):
+            self._log(f"FFmpeg not executable, fixing permissions: {self.ffmpeg_path}")
+            try:
+                os.chmod(self.ffmpeg_path, 0o755)
+            except OSError as e:
+                self._log(f"chmod failed: {e}", xbmc.LOGWARNING)
+
         output_path = self._make_temp_file(suffix=f'.{output_format}')
 
         try:
