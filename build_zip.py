@@ -2,12 +2,12 @@ import zipfile
 import os
 
 addon_id = 'service.subtitletranslator.tamabin'
-version = '1.0.4'
+version = '1.0.5'
 zip_name = f'{addon_id}-{version}.zip'
 base_dir = r'C:\Claude\Kodi'
 
 include_dirs = ['lib', 'resources']
-include_files = ['addon.xml', 'service.py', 'LICENSE']
+include_files = ['addon.xml', 'service.py', 'force_translate.py', 'LICENSE']
 exclude = {'.git', '__pycache__', '.pyc', '_ziptemp', '_zt', 'kodi-repo', 'build_zip.py', '.zip'}
 
 with zipfile.ZipFile(os.path.join(base_dir, zip_name), 'w', zipfile.ZIP_DEFLATED) as zf:

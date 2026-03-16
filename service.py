@@ -150,6 +150,12 @@ class SubtitleTranslatorMonitor(xbmc.Monitor):
         log("Settings changed, reloading configuration")
         self.player.reload_settings()
 
+    def onNotification(self, sender, method, data):
+        """Listen for force_translate notification from RunScript."""
+        if method == 'Other.force_translate_tamabin':
+            log("Received force_translate notification")
+            self.player.force_translate()
+
 
 class SubtitleTranslatorPlayer(xbmc.Player):
     """Player monitor for subtitle translation."""
@@ -718,6 +724,81 @@ class SubtitleTranslatorPlayer(xbmc.Player):
         
         return None
     
+    def _clean_sdh_tags(self, entries):
+        """Remove SDH/CC tags from subtitle entries before translation.
+
+        Removes: [risas], [music playing], (sighs), ♪ lyrics ♪, speaker IDs (JOHN:), etc.
+        Entries that become empty after cleanup are removed entirely.
+        Original timing is preserved.
+        """
+        import re
+
+        cleaned = []
+        removed_count = 0
+
+        for entry in entries:
+            text = entry.get('text', '')
+
+            # Remove content in square brackets: [laughs], [music], [door slams], etc.
+            text = re.sub(r'\[.*?\]', '', text)
+
+            # Remove content in parentheses that are SDH descriptions: (sighs), (laughing), etc.
+            # Be careful not to remove dialogue in parentheses
+            text = re.sub(r'\((?:sighs?|laughs?|laughing|cries|crying|gasps?|gasping|groans?|groaning|grunts?|grunting|screams?|screaming|whispers?|whispering|sobbing|sniffles?|sniffling|coughing|coughs?|chuckles?|chuckling|clears? throat|snoring|panting|breathing heavily|exhales?|inhales?|applause|cheering|music|music playing|music stops|silence|phone ringing|phone buzzing|doorbell|knocking|thunder|gunshot|explosion|footsteps|indistinct|inaudible|speaking .+?|in .+?)\)', '', text, flags=re.IGNORECASE)
+
+            # Remove music notes: ♪ ... ♪, ♫ ... ♫
+            text = re.sub(r'[♪♫].*?[♪♫]', '', text)
+            # Remove lone music notes
+            text = re.sub(r'[♪♫]', '', text)
+
+            # Remove speaker identification at start of line: "JOHN:", "MAN:", "WOMAN 1:"
+            lines = text.split('\n')
+            cleaned_lines = []
+            for line in lines:
+                # Remove "SPEAKER:" at start (all caps name followed by colon)
+                line = re.sub(r'^[A-Z][A-Z\s\d]+:\s*', '', line.strip())
+                # Remove "- SPEAKER:" at start of dialogue lines
+                line = re.sub(r'^-\s*[A-Z][A-Z\s\d]+:\s*', '- ', line.strip())
+                line = line.strip()
+                if line and line != '-':
+                    cleaned_lines.append(line)
+
+            text = '\n'.join(cleaned_lines).strip()
+
+            # Skip entries that are now empty or only whitespace/punctuation
+            if not text or not re.search(r'[a-zA-Z0-9]', text):
+                removed_count += 1
+                continue
+
+            entry_copy = dict(entry)
+            entry_copy['text'] = text
+            cleaned.append(entry_copy)
+
+        if removed_count > 0:
+            log(f"SDH cleanup: removed {removed_count} empty entries (pure SDH descriptions)")
+
+        return cleaned
+
+    def force_translate(self):
+        """Force re-trigger translation for the current video.
+
+        Resets the translated_file flag so translation runs again.
+        Can be called via RunScript or JSON-RPC notification.
+        """
+        if not self.isPlaying():
+            notify("No video playing")
+            return
+
+        log("Force translate requested by user")
+        self.translated_file = None
+        self.translation_in_progress = False
+
+        # Run translation check
+        import threading
+        t = threading.Thread(target=self.check_and_translate_subtitles)
+        t.daemon = True
+        t.start()
+
     def translate_subtitle(self, source_sub):
         """Translate the subtitle with progress tracking."""
         self.translation_in_progress = True
@@ -798,8 +879,18 @@ class SubtitleTranslatorPlayer(xbmc.Player):
                 raise Exception(error_msg)
             
             get_debug_logger().info(f"Parsed {len(entries)} subtitle entries", 'parse')
+
+            # Clean SDH tags before translation ([risas], [music], (sighs), ♪ lyrics ♪, etc.)
+            entries = self._clean_sdh_tags(entries)
+            get_debug_logger().info(f"After SDH cleanup: {len(entries)} entries remaining", 'parse')
+
+            if not entries:
+                error_msg = "No subtitle entries remain after SDH cleanup"
+                get_error_reporter().report_error('parse', error_msg)
+                raise Exception(error_msg)
+
             progress.total = len(entries)
-            
+
             # Check for cancellation
             if progress.is_cancelled():
                 get_debug_logger().info("Translation cancelled by user", 'translation')
