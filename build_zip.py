@@ -2,7 +2,7 @@ import zipfile
 import os
 
 addon_id = 'service.subtitletranslator.tamabin'
-version = '1.0.20'
+version = '1.0.21'
 zip_name = f'{addon_id}-{version}.zip'
 base_dir = r'C:\Claude\Kodi'
 
