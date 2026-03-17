@@ -355,8 +355,9 @@ class SubtitleTranslatorPlayer(xbmc.Player):
                 self.translated_file = None
             self.current_file = new_file
 
-            # Wait a moment for Kodi to load subtitle info
-            xbmc.sleep(2000)
+            # Wait for video playback to stabilize before checking subtitles
+            # Longer delay helps prevent OOM kills on Android TV (Shield/Fire TV)
+            xbmc.sleep(8000)
             
             if self.isPlaying():
                 self.check_and_translate_subtitles()
