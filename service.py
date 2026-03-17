@@ -342,25 +342,17 @@ class SubtitleTranslatorPlayer(xbmc.Player):
         return self.translation_service
     
     def onAVStarted(self):
-        """Called when audio/video playback starts."""
-        if not self.enabled:
-            return
-        
+        """Called when audio/video playback starts.
+
+        Does NOT auto-translate. Only tracks the current file.
+        Translation is triggered manually via force_translate.py / RunScript.
+        """
         try:
             new_file = self.getPlayingFile()
-            log(f"Playback started: {new_file}")
-
-            # Only reset translated_file flag if it's a different video
+            log(f"Playback started (manual-only mode): {new_file}")
             if new_file != self.current_file:
                 self.translated_file = None
             self.current_file = new_file
-
-            # Wait for video playback to stabilize before checking subtitles
-            # Longer delay helps prevent OOM kills on Android TV (Shield/Fire TV)
-            xbmc.sleep(8000)
-            
-            if self.isPlaying():
-                self.check_and_translate_subtitles()
         except Exception as e:
             log(f"Error in onAVStarted: {e}", level=xbmc.LOGERROR)
     
