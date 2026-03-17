@@ -63,7 +63,7 @@ class HttpBufferedReader:
     - Seeks within buffer are instant (no network I/O)
     """
 
-    def __init__(self, url, buffer_size=2 * 1024 * 1024):
+    def __init__(self, url, buffer_size=8 * 1024 * 1024):
         import requests as req
         self._url = url
         self._session = req.Session()
@@ -358,6 +358,7 @@ class MKVStreamingParser:
         """Reset state for a new parse."""
         self._timecode_scale = 1000000
         self._segment_start = 0
+        self._first_cluster_pos = 0
         self._tracks = []
         self._cues = []
         self._subtitle_blocks = []
@@ -600,7 +601,8 @@ class MKVStreamingParser:
                 self._parse_tracks(reader, elem_size)
                 found_tracks = True
             elif elem_id == CLUSTER:
-                # Stop at first cluster
+                # Stop at first cluster, remember position
+                self._first_cluster_pos = elem_start
                 reader.seek(elem_start)
                 break
             # Skip to next element
@@ -842,7 +844,9 @@ class MKVStreamingParser:
     def _scan_clusters_linear(self, reader, seg_start, seg_size, target_track_num):
         """Scan all clusters linearly, extracting subtitle blocks as we go."""
         end_pos = seg_start + seg_size
-        reader.seek(seg_start)
+        # Start from first cluster position if known, to skip re-reading headers
+        start_pos = self._first_cluster_pos if self._first_cluster_pos else seg_start
+        reader.seek(start_pos)
         cluster_count = 0
 
         while reader.tell() < end_pos:
