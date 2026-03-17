@@ -186,7 +186,58 @@ class SubtitleExtractor:
         self._executable_ffmpeg = None  # Cached executable FFmpeg path (Android internal storage)
         self.ffmpeg_path = ffmpeg_path or self._find_ffmpeg()
         self._mkv_parser = None
+        self._ffmpeg_server_url = self._get_ffmpeg_server_url()
         self._log(f"Initialized with FFmpeg: {self.ffmpeg_path} (Android: {self._is_android})")
+        if self._ffmpeg_server_url:
+            self._log(f"FFmpeg server configured: {self._ffmpeg_server_url}")
+
+    def _get_ffmpeg_server_url(self):
+        """Get FFmpeg server URL from addon settings."""
+        try:
+            addon = xbmcaddon.Addon()
+            url = addon.getSetting('ffmpeg_server_url')
+            if url and url.strip() and url.strip() != '-':
+                return url.strip().rstrip('/')
+        except Exception:
+            pass
+        return None
+
+    def _extract_via_server(self, video_url, stream_index=0, output_format='srt'):
+        """Extract subtitles via remote FFmpeg server.
+
+        The server runs FFmpeg natively (Docker on Orange Pi, NAS, PC, etc.)
+        and returns extracted subtitles in ~5-10 seconds.
+        """
+        if not self._ffmpeg_server_url:
+            return None
+
+        import requests
+        url = f"{self._ffmpeg_server_url}/extract"
+        payload = {
+            'url': video_url,
+            'stream_index': stream_index,
+            'format': output_format,
+        }
+
+        try:
+            self._log(f"Requesting FFmpeg server extraction: stream {stream_index}")
+            resp = requests.post(url, json=payload, timeout=120)
+            if resp.status_code == 200:
+                data = resp.json()
+                content = data.get('subtitles', '')
+                if content and len(content.strip()) > 10:
+                    self._log(f"FFmpeg server extracted {len(content)} bytes")
+                    return content
+                self._log("FFmpeg server returned empty subtitles", xbmc.LOGWARNING)
+            else:
+                error = resp.json().get('error', resp.text) if resp.text else 'Unknown'
+                self._log(f"FFmpeg server error ({resp.status_code}): {error}", xbmc.LOGWARNING)
+        except requests.ConnectionError:
+            self._log("FFmpeg server not reachable", xbmc.LOGWARNING)
+        except Exception as e:
+            self._log(f"FFmpeg server request failed: {e}", xbmc.LOGWARNING)
+
+        return None
     
     def _get_executable_ffmpeg(self):
         """Get an executable FFmpeg path on Android.
@@ -592,6 +643,13 @@ class SubtitleExtractor:
         self._log(f"Extracting subtitle stream {stream_index} from {video_path}")
 
         is_http = video_path.lower().startswith(('http://', 'https://'))
+
+        # Priority 1: Remote FFmpeg server (fastest on Android — ~5-10 seconds)
+        if is_http and self._ffmpeg_server_url:
+            content = self._extract_via_server(video_path, stream_index, output_format)
+            if content:
+                return content
+            self._log("FFmpeg server failed, trying local methods")
 
         # For HTTP/HTTPS URLs: use FFmpeg directly (it handles HTTP natively)
         # Python MKV parsers are too slow for HTTP — each seek = new HTTP connection

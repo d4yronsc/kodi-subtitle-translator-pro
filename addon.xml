@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<addon id="service.subtitletranslator.tamabin" name="Subtitle Translator Pro (TaMaBin)" version="1.0.13" provider-name="d4yronsc (fork of yeager)">
+<addon id="service.subtitletranslator.tamabin" name="Subtitle Translator Pro (TaMaBin)" version="1.0.14" provider-name="d4yronsc (fork of yeager)">
     <requires>
         <import addon="xbmc.python" version="3.0.0" />
         <import addon="script.module.requests" version="2.22.0" />
@@ -370,6 +370,12 @@ Tercih ettiğiniz dilde altyazı mevcut olmadığında, bu eklenti medya dosyas�
             <fanart>resources/fanart.png</fanart>
         </assets>
         <news>
+v1.0.14
+- NEW: Remote FFmpeg server support (Docker on Orange Pi/NAS/PC)
+- Extracts subtitles in ~5-10 seconds via network FFmpeg
+- Set server URL in Settings > FFmpeg Server URL
+- Falls back to local extraction if server unavailable
+
 v1.0.13
 - Buffer increased from 2MB to 8MB (reduces HTTP requests from ~850 to ~213)
 - Skip already-parsed headers on linear scan (start from first cluster)

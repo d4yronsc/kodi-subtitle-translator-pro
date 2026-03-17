@@ -1,0 +1,9 @@
+services:
+  ffmpeg-server:
+    build: .
+    container_name: ffmpeg-subtitle-server
+    ports:
+      - "7497:7497"
+    restart: unless-stopped
+    environment:
+      - PORT=7497
