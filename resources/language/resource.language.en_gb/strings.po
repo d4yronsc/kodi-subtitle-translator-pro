@@ -667,6 +667,10 @@ msgctxt "#30644"
 msgid "Flag untranslated text"
 msgstr ""
 
+msgctxt "#30650"
+msgid "FFmpeg Server URL (e.g. http://192.168.1.x:7497)"
+msgstr ""
+
 msgctxt "#30700"
 msgid "Translating subtitles..."
 msgstr ""
